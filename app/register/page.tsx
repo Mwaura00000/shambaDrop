@@ -5,8 +5,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Inter, Montserrat } from 'next/font/google';
+import { toast, Toaster } from 'sonner';
 
-// Load the custom fonts you specified in your PHP file
+// Load the custom fonts you specified
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 const montserrat = Montserrat({ subsets: ['latin'], variable: '--font-montserrat' });
 
@@ -25,7 +26,7 @@ export default function Register() {
     fullName: '', phone: '', email: '', password: '', confirmPassword: ''
   });
 
-  // Specific field errors (replaces the single error message)
+  // Specific field errors
   const [errors, setErrors] = useState({
     fullName: '', phone: '', email: '', password: '', confirmPassword: '', general: ''
   });
@@ -56,7 +57,7 @@ export default function Register() {
     let newErrors = { fullName: '', phone: '', email: '', password: '', confirmPassword: '', general: '' };
     let isValid = true;
 
-    // --- CLIENT SIDE VALIDATION (Ported from your PHP) ---
+    // --- CLIENT SIDE VALIDATION ---
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const phoneRegex = /^(07|01|\+2547|\+2541)[0-9]{8}$/;
 
@@ -94,22 +95,35 @@ export default function Register() {
         password: formData.password,
       });
 
-      if (authError) throw authError;
+      if (authError) {
+        if (authError.message.includes('already registered')) {
+            throw new Error("This email is already registered. Please log in.");
+        }
+        throw authError;
+      }
 
       if (authData.user) {
+        // Include the email field in the profile insert!
         const { error: profileError } = await supabase.from('profiles').insert([
           {
             id: authData.user.id,
             full_name: formData.fullName.trim(),
             phone: formData.phone.trim(),
+            email: formData.email.trim(), // <--- THE FIX
             role: role
           }
         ]);
 
         if (profileError) throw profileError;
 
-        alert(`Success! Welcome to AgriMove.`);
-        router.push('/'); // Change to dashboard later
+        toast.success(`Success! Welcome to AgriMove.`);
+        
+        // Push them to the correct dashboard immediately
+        if (role === 'farmer') {
+            router.push('/dashboard/farmer');
+        } else {
+            router.push('/dashboard/transporter');
+        }
       }
     } catch (error: any) {
       setErrors({ ...newErrors, general: error.message || 'Registration failed.' });
@@ -120,6 +134,7 @@ export default function Register() {
 
   return (
     <div className={`h-screen w-full flex bg-white text-gray-800 ${inter.variable} ${montserrat.variable} font-sans overflow-hidden`}>
+      <Toaster position="top-center" richColors />
       
       {/* LEFT SIDE: FORM */}
       <div className="w-full lg:w-1/2 flex flex-col px-8 sm:px-16 md:px-24 py-8 overflow-y-auto">
@@ -151,7 +166,7 @@ export default function Register() {
 
           <form onSubmit={handleRegister} className="space-y-4">
             
-            {/* ROLE TOGGLE (Custom Radio Style from PHP) */}
+            {/* ROLE TOGGLE */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">I am signing up as a:</label>
               <div className="grid grid-cols-2 gap-4">

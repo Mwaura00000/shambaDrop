@@ -153,7 +153,7 @@ export default function Home() {
             <div className="text-center lg:text-left">
               <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-green-200 text-green-700 font-bold text-xs uppercase tracking-widest mb-6 shadow-sm">
                 <span className="flex h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
-                Connecting Kenya's Supply Chain
+                Connecting Kenya&apos;s Supply Chain
               </div>
               <h1 className={`${montserrat.className} text-5xl sm:text-6xl lg:text-7xl font-black text-gray-900 leading-[1.1] mb-6 tracking-tight`}>
                 Move Your Harvest <br/>
@@ -384,7 +384,7 @@ export default function Home() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="bg-[#F8FAFC] p-10 rounded-3xl border border-gray-200 relative">
               <svg className="w-12 h-12 text-green-200 absolute top-8 left-8" fill="currentColor" viewBox="0 0 24 24"><path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" /></svg>
-              <p className="text-gray-700 text-xl italic relative z-10 pl-12 mb-8 font-medium leading-relaxed">"Before Agrimove, I would wait days for a broker to find a truck for my cabbages. Now, I post a request and have a driver at my farm in Uasin Gishu the same morning."</p>
+              <p className="text-gray-700 text-xl italic relative z-10 pl-12 mb-8 font-medium leading-relaxed">&quot;Before Agrimove, I would wait days for a broker to find a truck for my cabbages. Now, I post a request and have a driver at my farm in Uasin Gishu the same morning.&quot;</p>
               <div className="flex items-center gap-4 pl-12">
                 <div className={`${montserrat.className} w-14 h-14 bg-green-200 rounded-full flex items-center justify-center text-green-800 font-black text-lg`}>JM</div>
                 <div>
@@ -396,7 +396,7 @@ export default function Home() {
             
             <div className="bg-[#F8FAFC] p-10 rounded-3xl border border-gray-200 relative">
               <svg className="w-12 h-12 text-blue-200 absolute top-8 left-8" fill="currentColor" viewBox="0 0 24 24"><path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" /></svg>
-              <p className="text-gray-700 text-xl italic relative z-10 pl-12 mb-8 font-medium leading-relaxed">"I used to drive my Canter back empty from Nairobi to Nakuru. Now I use Agrimove to find return trips. It has doubled my monthly income."</p>
+              <p className="text-gray-700 text-xl italic relative z-10 pl-12 mb-8 font-medium leading-relaxed">&quot;I used to drive my Canter back empty from Nairobi to Nakuru. Now I use Agrimove to find return trips. It has doubled my monthly income.&quot;</p>
               <div className="flex items-center gap-4 pl-12">
                 <div className={`${montserrat.className} w-14 h-14 bg-blue-200 rounded-full flex items-center justify-center text-blue-800 font-black text-lg`}>DK</div>
                 <div>

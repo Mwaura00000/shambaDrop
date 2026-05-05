@@ -9,6 +9,32 @@ import { toast, Toaster } from 'sonner';
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 const montserrat = Montserrat({ subsets: ['latin'], variable: '--font-montserrat' });
 
+interface Profile {
+  id: string;
+  full_name: string;
+  phone?: string;
+  email?: string;
+  role: string;
+  base_rate_per_km?: number;
+  base_drop_fee?: number;
+}
+
+interface Load {
+  id: string;
+  status: string;
+  weight_tons: number;
+  specific_crop: string;
+  farmer_id: string;
+  driver_id?: string;
+  pickup_location: string;
+  dropoff_location: string;
+  calculated_distance: number;
+  target_price: number;
+  delivery_pin?: string;
+  receiver_phone?: string;
+  created_at: string;
+}
+
 export default function AdminDashboard() {
   const router = useRouter();
   
@@ -16,9 +42,9 @@ export default function AdminDashboard() {
   const [adminName, setAdminName] = useState('Admin');
 
   // Global Platform States
-  const [allLoads, setAllLoads] = useState<any[]>([]);
-  const [allUsers, setAllUsers] = useState<any[]>([]);
-  const [userMap, setUserMap] = useState<Record<string, any>>({});
+  const [allLoads, setAllLoads] = useState<Load[]>([]);
+  const [allUsers, setAllUsers] = useState<Profile[]>([]);
+  const [userMap, setUserMap] = useState<Record<string, Profile>>({});
   
   // KPI States
   const [totalEscrow, setTotalEscrow] = useState(0);
@@ -61,9 +87,9 @@ export default function AdminDashboard() {
     // 1. Fetch ALL Users
     const { data: profiles } = await supabase.from('profiles').select('*');
     if (profiles) {
-      setAllUsers(profiles);
-      const map: Record<string, any> = {};
-      profiles.forEach(p => map[p.id] = p);
+      setAllUsers(profiles as Profile[]);
+      const map: Record<string, Profile> = {};
+      profiles.forEach(p => map[p.id] = p as Profile);
       setUserMap(map);
     }
 
@@ -106,9 +132,10 @@ export default function AdminDashboard() {
       toast.dismiss();
       toast.success("Load Cancelled Successfully.");
       fetchPlatformData(); // Refresh UI
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to cancel load';
       toast.dismiss();
-      toast.error("Failed to cancel load", { description: error.message });
+      toast.error("Failed to cancel load", { description: errorMessage });
     }
   };
 
@@ -484,7 +511,7 @@ export default function AdminDashboard() {
                     <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>
                     System Data Management
                 </h3>
-                <p className="text-sm text-slate-500 mt-1">Manage global dropdown lists. (Note: To make these fully dynamic, create a 'system_data' table in Supabase and fetch them directly in the UI instead of hardcoding).</p>
+                <p className="text-sm text-slate-500 mt-1">Manage global dropdown lists. (Note: To make these fully dynamic, create a &apos;system_data&apos; table in Supabase and fetch them directly in the UI instead of hardcoding).</p>
               </div>
 
               <div className="p-8 space-y-10">

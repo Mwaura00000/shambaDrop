@@ -54,7 +54,7 @@ export default function Register() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    let newErrors = { fullName: '', phone: '', email: '', password: '', confirmPassword: '', general: '' };
+    const newErrors = { fullName: '', phone: '', email: '', password: '', confirmPassword: '', general: '' };
     let isValid = true;
 
     // --- CLIENT SIDE VALIDATION ---
@@ -125,8 +125,9 @@ export default function Register() {
             router.push('/dashboard/transporter');
         }
       }
-    } catch (error: any) {
-      setErrors({ ...newErrors, general: error.message || 'Registration failed.' });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Registration failed.';
+      setErrors({ ...newErrors, general: errorMessage });
     } finally {
       setIsLoading(false);
     }

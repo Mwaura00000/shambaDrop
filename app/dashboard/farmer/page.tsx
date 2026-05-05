@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { Inter, Montserrat } from 'next/font/google';
@@ -15,6 +15,53 @@ const isValidKenyanPhone = (phone: string) => {
   return /^(?:254|\+254|0)?((?:7|1)[0-9]{8})$/.test(cleaned);
 };
 
+interface Profile {
+  id: string;
+  full_name: string;
+  phone?: string;
+  email?: string;
+  role: string;
+  base_rate_per_km?: number;
+  base_drop_fee?: number;
+}
+
+interface Load {
+  id: string;
+  status: string;
+  weight_tons: number;
+  specific_crop: string;
+  farmer_id: string;
+  driver_id?: string;
+  pickup_location: string;
+  dropoff_location: string;
+  calculated_distance: number;
+  target_price: number;
+  delivery_pin?: string;
+  receiver_phone?: string;
+  created_at: string;
+}
+
+interface Message {
+  id: string;
+  load_id: string;
+  sender_id: string;
+  text: string;
+  created_at: string;
+}
+
+interface Driver extends Profile {
+  calculated_quote: number;
+  rating: string;
+  trips: number;
+}
+
+interface CropCategory {
+  id: string;
+  name: string;
+  icon: string;
+  crops: string[];
+}
+
 export default function FarmerDashboard() {
   const router = useRouter();
   
@@ -26,12 +73,12 @@ export default function FarmerDashboard() {
   const [userPhone, setUserPhone] = useState('');
   const [escrowBalance, setEscrowBalance] = useState(10000);
   
-  const [activeLoads, setActiveLoads] = useState<any[]>([]);
+  const [activeLoads, setActiveLoads] = useState<Load[]>([]);
   const [driverNames, setDriverNames] = useState<Record<string, string>>({}); 
   const [driverPhones, setDriverPhones] = useState<Record<string, string>>({});
 
   // System Config States (Fetched from DB)
-  const [cropCategories, setCropCategories] = useState<any[]>([]);
+  const [cropCategories, setCropCategories] = useState<CropCategory[]>([]);
   const [kenyaLocations, setKenyaLocations] = useState<Record<string, string[]>>({});
 
   const [isWizardOpen, setIsWizardOpen] = useState(false);
@@ -41,16 +88,16 @@ export default function FarmerDashboard() {
   const [depositAmount, setDepositAmount] = useState('');
   const [depositPhone, setDepositPhone] = useState('');
 
-  const [reviewLoad, setReviewLoad] = useState<any | null>(null);
-  const [availableDrivers, setAvailableDrivers] = useState<any[]>([]);
+  const [reviewLoad, setReviewLoad] = useState<Load | null>(null);
+  const [availableDrivers, setAvailableDrivers] = useState<Driver[]>([]);
   const [isFetchingDrivers, setIsFetchingDrivers] = useState(false);
 
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
-  const [activeChatLoad, setActiveChatLoad] = useState<any | null>(null);
-  const [messages, setMessages] = useState<any[]>([]);
+  const [activeChatLoad, setActiveChatLoad] = useState<Load | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -65,6 +112,38 @@ export default function FarmerDashboard() {
 
   const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
   const [isLocatingGPS, setIsLocatingGPS] = useState(false);
+
+  const fetchMyLoads = useCallback(async (uid: string) => {
+    const { data } = await supabase.from('loads').select('*').eq('farmer_id', uid).order('created_at', { ascending: false });
+    if (data) {
+      setActiveLoads(data as Load[]);
+      const driverIds = (data as Load[]).filter(l => l.driver_id).map(l => l.driver_id);
+      if (driverIds.length > 0) {
+        const { data: profiles } = await supabase.from('profiles').select('id, full_name, phone').in('id', driverIds);
+        if (profiles) {
+          const namesMap: Record<string, string> = {};
+          const phonesMap: Record<string, string> = {};
+          profiles.forEach(p => {
+              namesMap[p.id] = p.full_name;
+              phonesMap[p.id] = p.phone || ''; 
+          });
+          setDriverNames(namesMap);
+          setDriverPhones(phonesMap);
+        }
+      }
+      
+      const inTransitLoads = (data as Load[]).filter(l => l.status === 'in_transit');
+      if (inTransitLoads.length > 0 && !activeChatLoad) {
+        setActiveChatLoad(inTransitLoads[0]);
+      }
+    }
+  }, [activeChatLoad]);
+
+  const fetchMessages = useCallback(async () => {
+    if (!activeChatLoad) return;
+    const { data } = await supabase.from('messages').select('*').eq('load_id', activeChatLoad.id).order('created_at', { ascending: true });
+    if (data) setMessages(data as Message[]);
+  }, [activeChatLoad]);
 
   useEffect(() => {
     const init = async () => {
@@ -104,46 +183,17 @@ export default function FarmerDashboard() {
     return () => { 
       supabase.removeChannel(loadChannel); 
     };
-  }, [router, userId]);
+  }, [router, userId, fetchMyLoads]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const fetchMyLoads = async (uid: string) => {
-    const { data } = await supabase.from('loads').select('*').eq('farmer_id', uid).order('created_at', { ascending: false });
-    if (data) {
-      setActiveLoads(data);
-      const driverIds = data.filter(l => l.driver_id).map(l => l.driver_id);
-      if (driverIds.length > 0) {
-        const { data: profiles } = await supabase.from('profiles').select('id, full_name, phone').in('id', driverIds);
-        if (profiles) {
-          const namesMap: Record<string, string> = {};
-          const phonesMap: Record<string, string> = {};
-          profiles.forEach(p => {
-              namesMap[p.id] = p.full_name;
-              phonesMap[p.id] = p.phone || ''; 
-          });
-          setDriverNames(namesMap);
-          setDriverPhones(phonesMap);
-        }
-      }
-      
-      const inTransitLoads = data.filter(l => l.status === 'in_transit');
-      if (inTransitLoads.length > 0 && !activeChatLoad) {
-        setActiveChatLoad(inTransitLoads[0]);
-      }
-    }
-  };
+
 
   useEffect(() => {
     if (activeChatLoad) {
-      const fetchMessages = async () => {
-        const { data } = await supabase.from('messages').select('*').eq('load_id', activeChatLoad.id).order('created_at', { ascending: true });
-        if (data) setMessages(data);
-      };
       fetchMessages();
-
       const messageChannel = supabase
         .channel(`chat-farmer-${activeChatLoad.id}`)
         .on('postgres_changes', { 
@@ -151,14 +201,14 @@ export default function FarmerDashboard() {
           schema: 'public', 
           table: 'messages',
           filter: `load_id=eq.${activeChatLoad.id}` 
-        }, payload => {
-          setMessages(prev => [...prev, payload.new]);
+        }, () => {
+          fetchMessages();
         })
         .subscribe();
 
       return () => { supabase.removeChannel(messageChannel); };
     }
-  }, [activeChatLoad]);
+  }, [activeChatLoad, fetchMessages]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -179,7 +229,7 @@ export default function FarmerDashboard() {
     }
   };
 
-  const handleOpenMarketplace = async (load: any) => {
+  const handleOpenMarketplace = async (load: Load) => {
     if (load.status !== 'pending_driver') return; 
     setReviewLoad(load);
     setIsFetchingDrivers(true);
@@ -208,14 +258,15 @@ export default function FarmerDashboard() {
       } else { 
         setAvailableDrivers([]); 
       }
-    } catch (error) { 
-      toast.error("Failed to load drivers.");
+    } catch {
+        toast.error("Failed to load drivers.");
     } finally { 
       setIsFetchingDrivers(false); 
     }
   };
 
-  const handleSecureDriver = async (driver: any) => {
+  const handleSecureDriver = async (driver: Driver) => {
+    if (!reviewLoad) return;
     toast.loading("Securing Driver & Processing Escrow...");
     const generatedPin = Math.floor(1000 + Math.random() * 9000).toString();
 
@@ -246,8 +297,9 @@ export default function FarmerDashboard() {
 
       toast.dismiss(); toast.success("Driver Secured!", { description: `Check your dashboard or email for the Delivery PIN.` });
       setReviewLoad(null); fetchMyLoads(userId); 
-    } catch (error: any) {
-      toast.dismiss(); toast.error("Failed to secure driver", { description: error.message });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to secure driver';
+      toast.dismiss(); toast.error("Failed to secure driver", { description: errorMessage });
     }
   };
 
@@ -260,8 +312,9 @@ export default function FarmerDashboard() {
       setUserName(editName.split(' ')[0].toUpperCase());
       setUserPhone(editPhone);
       toast.success("Profile Updated Successfully!");
-    } catch (error: any) {
-      toast.error("Update failed", { description: error.message });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Update failed';
+      toast.error("Update failed", { description: errorMessage });
     } finally {
       setIsSavingSettings(false);
     }
@@ -484,7 +537,7 @@ export default function FarmerDashboard() {
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                   <h2 className={`${montserrat.className} text-3xl font-black text-gray-900 tracking-tight`}>Welcome back, {userName}! 👋</h2>
-                  <p className="text-gray-500 text-sm mt-1">Here's what's happening with your farm transport today.</p>
+                  <p className="text-gray-500 text-sm mt-1">Here&apos;s what&apos;s happening with your farm transport today.</p>
                 </div>
                 <div className="flex gap-3">
                   <button onClick={() => setIsDepositOpen(true)} className="px-5 py-2.5 border-2 border-emerald-500 text-emerald-600 font-bold rounded-xl hover:bg-emerald-50 transition flex items-center gap-2 text-sm shadow-sm">
@@ -557,7 +610,7 @@ export default function FarmerDashboard() {
                                     <span className="font-bold text-amber-500 text-[10px] tracking-widest uppercase whitespace-nowrap">AWAITING DRIVER</span>
                                   ) : (
                                     <div>
-                                      <p className="font-semibold text-gray-800 truncate max-w-[130px] whitespace-nowrap">{driverNames[load.driver_id] || 'Assigned Driver'}</p>
+                                      <p className="font-semibold text-gray-800 truncate max-w-[130px] whitespace-nowrap">{load.driver_id ? driverNames[load.driver_id] : 'Assigned Driver'}</p>
                                     </div>
                                   )}
                                 </td>
@@ -679,7 +732,7 @@ export default function FarmerDashboard() {
                                 <span className="font-bold text-amber-500 text-[10px] tracking-widest uppercase whitespace-nowrap">-</span>
                               ) : (
                                 <div>
-                                  <p className="font-semibold text-gray-800 truncate max-w-[130px] whitespace-nowrap">{driverNames[load.driver_id] || 'Assigned Driver'}</p>
+                                  <p className="font-semibold text-gray-800 truncate max-w-[130px] whitespace-nowrap">{load.driver_id ? driverNames[load.driver_id] : 'Assigned Driver'}</p>
                                 </div>
                               )}
                             </td>
@@ -730,10 +783,10 @@ export default function FarmerDashboard() {
                         className={`p-4 border-b border-gray-100 cursor-pointer flex items-center gap-3 transition ${activeChatLoad?.id === load.id ? 'bg-emerald-50/80 border-l-4 border-l-emerald-500' : 'hover:bg-gray-50'}`}
                       >
                           <div className="w-10 h-10 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0">
-                              {(driverNames[load.driver_id] || 'D').charAt(0).toUpperCase()}
+                              {(load.driver_id ? driverNames[load.driver_id] : 'D').charAt(0).toUpperCase()}
                           </div>
                           <div className="flex-1 overflow-hidden">
-                              <p className="font-bold text-gray-900 text-sm truncate">{driverNames[load.driver_id] || 'Transporter'}</p>
+                              <p className="font-bold text-gray-900 text-sm truncate">{load.driver_id ? driverNames[load.driver_id] : 'Transporter'}</p>
                               <p className="text-xs text-gray-500 truncate mt-0.5">TR-{load.id.toString().substring(0,4)} • {load.specific_crop}</p>
                           </div>
                       </div>
@@ -746,7 +799,7 @@ export default function FarmerDashboard() {
                   <>
                     <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
                         <div>
-                            <h3 className="font-bold text-gray-900">{driverNames[activeChatLoad.driver_id] || 'Transporter'}</h3>
+                            <h3 className="font-bold text-gray-900">{activeChatLoad.driver_id ? driverNames[activeChatLoad.driver_id] : 'Transporter'}</h3>
                             <div className="flex items-center gap-3 mt-0.5">
                               <p className="text-xs text-emerald-600 font-bold flex items-center gap-1"><span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> Tracking Active</p>
                               <p className="text-[10px] font-black tracking-widest bg-purple-100 text-purple-700 px-2 py-0.5 rounded-md border border-purple-200">PIN: {activeChatLoad.delivery_pin}</p>
@@ -755,7 +808,7 @@ export default function FarmerDashboard() {
                         <a 
                           href={`tel:${activeChatLoad?.driver_id ? driverPhones[activeChatLoad.driver_id] : ''}`} 
                           onClick={(e) => {
-                            if(!driverPhones[activeChatLoad.driver_id]){
+                            if(!activeChatLoad.driver_id || !driverPhones[activeChatLoad.driver_id]){
                                 e.preventDefault();
                                 toast.error("Driver hasn't provided a phone number.");
                             } else {
@@ -951,7 +1004,7 @@ export default function FarmerDashboard() {
 
             <div className="flex-1 overflow-y-auto p-6 bg-gray-50/50 space-y-4">
               <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl mb-2">
-                <p className="text-xs font-medium text-emerald-800">The system has calculated these fixed-price offers based on the distance and load weight using the drivers' current base rates.</p>
+                <p className="text-xs font-medium text-emerald-800">The system has calculated these fixed-price offers based on the distance and load weight using the drivers&apos; current base rates.</p>
               </div>
 
               {isFetchingDrivers ? (
@@ -1048,7 +1101,7 @@ export default function FarmerDashboard() {
                   </div>
 
                   <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
-                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2 ml-1">Receiver's Phone Number</label>
+                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2 ml-1">Receiver&apos;s Phone Number</label>
                     <p className="text-xs text-gray-400 mb-3 ml-1">We will text the secure 4-digit Delivery PIN to this number.</p>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">

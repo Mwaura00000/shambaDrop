@@ -60,8 +60,9 @@ export default function Login() {
           router.push(profile?.role === 'transporter' ? '/dashboard/transporter' : '/dashboard/farmer');
         }, 1000);
       }
-    } catch (error: any) {
-      toast.error("SYSTEM CRASH", { description: error.message });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      toast.error("SYSTEM CRASH", { description: errorMessage });
       setIsLoading(false);
     }
   };
@@ -151,7 +152,7 @@ export default function Login() {
           </div>
 
           <p className="text-center text-gray-500 text-sm mt-8 font-medium">
-            Don't have an account? <Link href="/register" className="font-bold text-green-600 hover:text-green-700 transition">Create one now</Link>
+            Don&apos;t have an account? <Link href="/register" className="font-bold text-green-600 hover:text-green-700 transition">Create one now</Link>
           </p>
         </div>
       </div>

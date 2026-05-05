@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { Inter, Montserrat } from 'next/font/google';
@@ -8,6 +8,30 @@ import { toast, Toaster } from 'sonner';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 const montserrat = Montserrat({ subsets: ['latin'], variable: '--font-montserrat' });
+
+interface Load {
+  id: string;
+  status: string;
+  weight_tons: number;
+  specific_crop: string;
+  farmer_id: string;
+  driver_id?: string;
+  pickup_location: string;
+  dropoff_location: string;
+  calculated_distance: number;
+  target_price: number;
+  delivery_pin?: string;
+  receiver_phone?: string;
+  created_at: string;
+}
+
+interface Message {
+  id: string;
+  load_id: string;
+  sender_id: string;
+  text: string;
+  created_at: string;
+}
 
 export default function TransporterDashboard() {
   const router = useRouter();
@@ -20,9 +44,9 @@ export default function TransporterDashboard() {
   const [walletBalance, setWalletBalance] = useState(28830);
   const [driverRates, setDriverRates] = useState({ baseRate: 100, dropFee: 2500 });
   
-  const [liveLoads, setLiveLoads] = useState<any[]>([]);
-  const [myJobs, setMyJobs] = useState<any[]>([]);
-  const [activeJob, setActiveJob] = useState<any | null>(null);
+  const [liveLoads, setLiveLoads] = useState<Load[]>([]);
+  const [myJobs, setMyJobs] = useState<Load[]>([]);
+  const [activeJob, setActiveJob] = useState<Load | null>(null);
   const [farmerNames, setFarmerNames] = useState<Record<string, string>>({});
   const [farmerPhones, setFarmerPhones] = useState<Record<string, string>>({});
 
@@ -39,10 +63,57 @@ export default function TransporterDashboard() {
   const [deliveryPin, setDeliveryPin] = useState('');
 
   // --- MESSAGING STATES ---
-  const [activeChatLoad, setActiveChatLoad] = useState<any | null>(null);
-  const [messages, setMessages] = useState<any[]>([]);
+  const [activeChatLoad, setActiveChatLoad] = useState<Load | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const fetchFarmerNames = useCallback(async (loads: Load[]) => {
+      const fIds = [...new Set(loads.map(l => l.farmer_id))];
+      if (fIds.length > 0) {
+          const { data: profiles } = await supabase.from('profiles').select('id, full_name, phone').in('id', fIds);
+          if (profiles) {
+              const namesMap: Record<string, string> = { ...farmerNames };
+              const phonesMap: Record<string, string> = { ...farmerPhones };
+              profiles.forEach(p => {
+                namesMap[p.id] = p.full_name;
+                phonesMap[p.id] = p.phone || '';
+              });
+              setFarmerNames(namesMap);
+              setFarmerPhones(phonesMap);
+          }
+      }
+  }, [farmerNames, farmerPhones]);
+
+  const fetchMessages = useCallback(async () => {
+    if (activeChatLoad) {
+      const { data } = await supabase.from('messages').select('*').eq('load_id', activeChatLoad.id).order('created_at', { ascending: true });
+      if (data) setMessages(data as Message[]);
+    }
+  }, [activeChatLoad]);
+
+  const fetchLiveLoads = useCallback(async () => {
+    const { data } = await supabase.from('loads').select('*').eq('status', 'pending_driver').order('created_at', { ascending: false });
+    if (data) {
+        setLiveLoads(data as Load[]);
+        fetchFarmerNames(data as Load[]);
+    }
+  }, [fetchFarmerNames]);
+
+  const fetchMyJobs = useCallback(async (uid: string) => {
+    const { data } = await supabase.from('loads').select('*').eq('driver_id', uid).order('created_at', { ascending: false });
+    if (data) {
+      setMyJobs(data as Load[]);
+      fetchFarmerNames(data as Load[]);
+      const current = (data as Load[]).find(j => j.status === 'in_transit');
+      if (current) {
+        setActiveJob(current);
+        if(!activeChatLoad) setActiveChatLoad(current);
+      } else {
+        setActiveJob(null);
+      }
+    }
+  }, [activeChatLoad, fetchFarmerNames]);
 
   useEffect(() => {
     const init = async () => {
@@ -92,61 +163,20 @@ export default function TransporterDashboard() {
     return () => { 
       supabase.removeChannel(loadChannel); 
     };
-  }, [router, userId]);
+  }, [router, userId, fetchLiveLoads, fetchMyJobs]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const fetchLiveLoads = async () => {
-    const { data } = await supabase.from('loads').select('*').eq('status', 'pending_driver').order('created_at', { ascending: false });
-    if (data) {
-        setLiveLoads(data);
-        fetchFarmerNames(data);
-    }
-  };
 
-  const fetchMyJobs = async (uid: string) => {
-    const { data } = await supabase.from('loads').select('*').eq('driver_id', uid).order('created_at', { ascending: false });
-    if (data) {
-      setMyJobs(data);
-      fetchFarmerNames(data);
-      const current = data.find(j => j.status === 'in_transit');
-      if (current) {
-        setActiveJob(current);
-        if(!activeChatLoad) setActiveChatLoad(current);
-      } else {
-        setActiveJob(null);
-      }
-    }
-  };
 
-  const fetchFarmerNames = async (loads: any[]) => {
-      const fIds = [...new Set(loads.map(l => l.farmer_id))];
-      if (fIds.length > 0) {
-          const { data: profiles } = await supabase.from('profiles').select('id, full_name, phone').in('id', fIds);
-          if (profiles) {
-              const namesMap: Record<string, string> = { ...farmerNames };
-              const phonesMap: Record<string, string> = { ...farmerPhones };
-              profiles.forEach(p => {
-                namesMap[p.id] = p.full_name;
-                phonesMap[p.id] = p.phone || '';
-              });
-              setFarmerNames(namesMap);
-              setFarmerPhones(phonesMap);
-          }
-      }
-  };
+
 
   // FIXED: STRICT FILTERED MESSAGE LISTENER FOR TRANSPORTER
   useEffect(() => {
     if (activeChatLoad) {
-      const fetchMessages = async () => {
-        const { data } = await supabase.from('messages').select('*').eq('load_id', activeChatLoad.id).order('created_at', { ascending: true });
-        if (data) setMessages(data);
-      };
       fetchMessages();
-
       const messageChannel = supabase
         .channel(`chat-transporter-${activeChatLoad.id}`)
         .on('postgres_changes', { 
@@ -154,14 +184,14 @@ export default function TransporterDashboard() {
           schema: 'public', 
           table: 'messages',
           filter: `load_id=eq.${activeChatLoad.id}` // THIS STOPS THE CROSS-TALK!
-        }, payload => {
-          setMessages(prev => [...prev, payload.new]);
+        }, () => {
+          fetchMessages();
         })
         .subscribe();
 
       return () => { supabase.removeChannel(messageChannel); };
     }
-  }, [activeChatLoad]);
+  }, [activeChatLoad, setMessages, fetchMessages]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -181,7 +211,7 @@ export default function TransporterDashboard() {
   };
 
   // --- THE HYBRID BROADCAST ACCEPTANCE ---
-  const handleAcceptJob = async (load: any) => {
+  const handleAcceptJob = async (load: Load) => {
     toast.loading("Locking in job & processing payout algorithm...");
     
     // Auto-calculate your payout based on your rates
@@ -194,7 +224,7 @@ export default function TransporterDashboard() {
 
     try {
       // Try to claim the job in the database
-      const { error, count } = await supabase.from('loads').update({ 
+      const { error } = await supabase.from('loads').update({ 
         status: 'in_transit', 
         driver_id: userId, 
         target_price: finalPrice,
@@ -221,7 +251,7 @@ export default function TransporterDashboard() {
       fetchMyJobs(userId);
       fetchLiveLoads();
       setActiveTab('dashboard'); // Jump to dashboard to see active job
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.dismiss();
       toast.error("Failed to claim job", { description: "Another driver may have already taken it." });
     }
@@ -232,7 +262,7 @@ export default function TransporterDashboard() {
       toast.error("Invalid Input", { description: "Please enter the 4-digit PIN." });
       return;
     }
-    if (deliveryPin !== activeJob.delivery_pin) {
+    if (!activeJob || deliveryPin !== activeJob.delivery_pin) {
       toast.error("Verification Failed", { description: "The PIN provided is incorrect. Please ask the receiver again." });
       return;
     }
@@ -249,8 +279,9 @@ export default function TransporterDashboard() {
       setDeliveryPin('');
       fetchMyJobs(userId);
       setActiveChatLoad(null); 
-    } catch (error: any) {
-      toast.dismiss(); toast.error("System Error", { description: error.message });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'System Error';
+      toast.dismiss(); toast.error("System Error", { description: errorMessage });
     }
   };
 
@@ -263,7 +294,10 @@ export default function TransporterDashboard() {
       setUserName(editName.split(' ')[0].toUpperCase());
       setDriverRates({ baseRate: editBaseRate, dropFee: editDropFee });
       toast.success("Profile & Rates Updated!", { description: "Your smart quoting algorithm has been recalibrated." });
-    } catch (error: any) { toast.error("Update failed", { description: error.message }); } 
+    } catch (error: unknown) { 
+      const errorMessage = error instanceof Error ? error.message : 'Update failed';
+      toast.error("Update failed", { description: errorMessage }); 
+    } 
     finally { setIsSavingSettings(false); }
   };
 
@@ -371,7 +405,7 @@ export default function TransporterDashboard() {
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                   <h2 className={`${montserrat.className} text-3xl font-black text-gray-900 tracking-tight`}>Welcome to the road, {userName}! 👋</h2>
-                  <p className="text-gray-500 text-sm mt-1">Here's your real-time performance and active market overview.</p>
+                  <p className="text-gray-500 text-sm mt-1">Here&apos;s your real-time performance and active market overview.</p>
                 </div>
                 <button onClick={() => setIsWithdrawOpen(true)} className="px-6 py-2.5 bg-white border-2 border-blue-600 text-blue-700 font-bold rounded-xl hover:bg-blue-50 transition flex items-center gap-2 text-sm shadow-sm">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -422,9 +456,9 @@ export default function TransporterDashboard() {
                                 <div className="bg-white border border-blue-200 rounded-xl p-4 flex justify-between items-center shadow-sm">
                                     <div>
                                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Farmer Phone</p>
-                                        <p className="text-lg font-black text-blue-900">{farmerPhones[activeJob.farmer_id] || 'Not Provided'}</p>
+                                        <p className="text-lg font-black text-blue-900">{activeJob.farmer_id ? farmerPhones[activeJob.farmer_id] : 'Not Provided'}</p>
                                     </div>
-                                    <a href={`tel:${farmerPhones[activeJob.farmer_id]}`} className="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center hover:bg-blue-700 shadow-md transition">
+                                    <a href={`tel:${activeJob.farmer_id ? farmerPhones[activeJob.farmer_id] : ''}`} className="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center hover:bg-blue-700 shadow-md transition">
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
                                     </a>
                                 </div>
@@ -577,7 +611,7 @@ export default function TransporterDashboard() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {myJobs.length === 0 ? (
-                      <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-400 font-medium">You haven't completed any jobs yet.</td></tr>
+                      <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-400 font-medium">You haven&apos;t completed any jobs yet.</td></tr>
                     ) : (
                       myJobs.map((job) => (
                         <tr key={job.id} className="hover:bg-gray-50 transition">
@@ -650,9 +684,9 @@ export default function TransporterDashboard() {
                             <p className="text-xs text-green-500 font-bold flex items-center gap-1 mt-0.5"><span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span> Online</p>
                         </div>
                         <a 
-                          href={`tel:${activeChatLoad?.farmer_id ? farmerPhones[activeChatLoad.farmer_id] : ''}`} 
+                          href={`tel:${activeChatLoad?.farmer_id && farmerPhones[activeChatLoad.farmer_id] ? farmerPhones[activeChatLoad.farmer_id] : ''}`} 
                           onClick={(e) => {
-                            if(!farmerPhones[activeChatLoad.farmer_id]){
+                            if(!activeChatLoad.farmer_id || !farmerPhones[activeChatLoad.farmer_id]){
                                 e.preventDefault();
                                 toast.error("Farmer hasn't provided a phone number.");
                             } else {

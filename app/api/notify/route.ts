@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     console.log(`✅ REAL EMAIL SENT TO: ${recipient}`);
 
     return NextResponse.json(data);
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Email failed" }, { status: 500 });
   }
 }
